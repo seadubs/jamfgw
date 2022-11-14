@@ -1,28 +1,38 @@
-use axum::{
-    http::StatusCode,
-    response,
-    Extension,
-};
-use reqwest::Client;
+use axum::{http::StatusCode, response, Extension};
 use serde::{Deserialize, Serialize};
-use serde_json::{from_str, from_value, json, Value};
+use serde_json::{from_value, json, Value};
 use std::sync::Arc;
+use version_compare::Version;
 
+use crate::jamf::computer_inventory::query_jamf_computer_inventory;
+use crate::jamf::macos_updates;
 use crate::state::State;
 
-const JAMF_DEVICE_LIST_URL: &str = "api/v1/computers-inventory";
-
 #[derive(Serialize, Deserialize)]
-struct Device {
-    device_id: String, // Why does Jamf use strings to represent numeric ids?
+struct ResponseDevice {
+    device_id: String,
     name: String,
     model: String,
     os: String,
     os_is_latest: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+struct Device {
+    // ? Why does Jamf use strings to represent numeric ids?
+    device_id: String,
+    name: String,
+    model: String,
+    os: String,
+    os_name: String,
+    os_version: String,
+    os_is_latest: bool,
+}
+
 // todo: try_read and reject rather than block
-pub async fn get_devices(Extension(state): Extension<Arc<State>>) -> (StatusCode, response::Json<Value>) {
+pub async fn get_devices(
+    Extension(state): Extension<Arc<State>>,
+) -> (StatusCode, response::Json<Value>) {
     // Copy auth data for consistency
     let auth_valid = *state.auth_valid.read().unwrap();
     let auth_token = (*state.auth_token.read().unwrap().token).to_string();
@@ -32,13 +42,18 @@ pub async fn get_devices(Extension(state): Extension<Arc<State>>) -> (StatusCode
     if !auth_valid {
         return (
             StatusCode::UNAUTHORIZED,
-            response::Json(json!({"err": "unauthorized"})),
+            response::Json(json!({"err": "server credentials are not set and/or not valid"})),
         );
     }
 
     // Get list of devices, 500 if we fail
     match query_jamf_devices(auth_token, url).await {
-        Ok((devices, status)) => return (status, response::Json(json!({ "devices": devices }))),
+        Ok(devices) => {
+            return (
+                StatusCode::OK,
+                response::Json(json!({ "devices": devices })),
+            )
+        }
         Err(err) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -48,100 +63,92 @@ pub async fn get_devices(Extension(state): Extension<Arc<State>>) -> (StatusCode
     };
 }
 
-async fn query_jamf_devices(
-    token: String,
-    url: String,
-) -> Result<(Vec<Device>, StatusCode), Box<dyn std::error::Error>> {
-    let client = Client::new();
+async fn query_jamf_devices(token: String, url: String) -> Result<Vec<Device>, &'static str> {
     let mut device_list: Vec<Device> = vec![];
-    let mut status = StatusCode::OK;
-    let mut query_val = json!("");
-    let mut expected_devices = 0;
-    let mut current_page = 0;
 
-    // Handle pagination
-    while device_list.len() < expected_devices || current_page == 0 {
-        // todo: process response to provide more accurate http response codes to our client
-        let query_text: String = client
-            .get(format!("{}{}", url, JAMF_DEVICE_LIST_URL))
-            .bearer_auth(&token)
-            .query(&[
-                ("section", "GENERAL"),
-                ("section", "HARDWARE"),
-                ("section", "OPERATING_SYSTEM"),
-                ("section", "SOFTWARE_UPDATES"),
-            ])
-            .query(&[("page", current_page)])
-            .send()
-            .await?
-            .text()
-            .await?;
+    let latest_macos_version = match latest_macos_update(token.clone(), url.clone()).await {
+        Ok((response, _status)) => response,
+        Err(_) => return Err("failed to retrieve latest macos update version info"),
+    };
+    let latest_macos_version = Version::from(&latest_macos_version).unwrap();
 
-        // Ensure json is well formed and parsable
-        match from_str(&query_text[..]) {
-            Ok(val) => query_val = val,
-            Err(_) => status = StatusCode::BAD_GATEWAY,
-        };
+    let devices = match query_jamf_computer_inventory(&url, &token).await {
+        Ok(value) => value,
+        Err(_) => return Err("Failed to get list of devices from jamf"),
+    };
 
-        // Update total number of expected devices
-        expected_devices = match from_value(query_val["totalCount"].clone()) {
-            Ok(total_count) => total_count,
-            Err(err) => {
-                println!("unable to parse totalCount from computers query: {:?}", err);
-                status = StatusCode::BAD_GATEWAY;
-                0
-            }
-        };
-
-        // Extract list of results
-        let devices = match serde_json::from_value::<Vec<Value>>(query_val["results"].clone()) {
-            Ok(devices) => devices,
-            Err(_) => {
-                status = StatusCode::BAD_GATEWAY;
-                Vec::new()
-            }
-        };
-
-        // Not using strictly typed serde_json deserialization to avoid breaking on minor API changes
-        for device in devices {
-            let device_id = from_value(device["id"].clone())
-                .expect(&format!("unable to parse device id: {:?}", device["id"]));
-            let name = from_value(device["general"]["name"].clone()).expect(&format!(
-                "unable to parse device name: {:?}",
-                device["general"]["name"]
+    // Not using strictly typed serde_json deserialization to avoid breaking on minor API changes
+    for device in devices {
+        let device_id = from_value(device["id"].clone())
+            .expect(&format!("unable to parse device id: {:?}", device["id"]));
+        let name = from_value(device["general"]["name"].clone()).expect(&format!(
+            "unable to parse device name: {:?}",
+            device["general"]["name"]
+        ));
+        let model = from_value(device["hardware"]["model"].clone())
+            .expect(&format!("unable to parse device model: {:?}", device["id"]));
+        let os_name: String =
+            from_value(device["operatingSystem"]["name"].clone()).expect(&format!(
+                "unable to parse device os name: {:?}",
+                device["operatingSystem"]["name"]
             ));
-            let model = from_value(device["hardware"]["model"].clone())
-                .expect(&format!("unable to parse device model: {:?}", device["id"]));
-            let os_name: String =
-                from_value(device["operatingSystem"]["name"].clone()).expect(&format!(
-                    "unable to parse device os name: {:?}",
-                    device["operatingSystem"]["name"]
-                ));
-            let os_version: String = from_value(device["operatingSystem"]["version"].clone())
-                .expect(&format!(
-                    "unable to parse device os version: {:?}",
-                    device["operatingSystem"]["version"]
-                ));
-            let software_udates: Vec<Value> =
-                from_value(device["softwareUpdates"].clone()).expect(&format!(
-                    "unable to parse device software updates list: {:?}",
-                    device["softwareUpdates"]
-                ));
+        let os_version: String =
+            from_value(device["operatingSystem"]["version"].clone()).expect(&format!(
+                "unable to parse device os version: {:?}",
+                device["operatingSystem"]["version"]
+            ));
 
-            device_list.push(Device {
-                device_id,
-                name,
-                model,
-                os: format!("{} {}", os_name, os_version),
-                // todo: replace with comparison against versions retrieved from jamf
-                os_is_latest: { software_udates.len() == 0 },
-            })
-        }
-
-        current_page += 1;
+        device_list.push(Device {
+            device_id,
+            name,
+            model,
+            os_name: os_name.clone(),
+            os_version: os_version.clone(),
+            os: format!("{} {}", os_name, os_version),
+            os_is_latest: false,
+        })
     }
 
-    // todo: for each device in devices_json, query for it's OS update state and push to device_list
+    for device in device_list.iter_mut() {
+        device.os_is_latest = match device.os_name.as_str() {
+            "macOS" => {
+                let version = Version::from(&device.os_version).unwrap();
+                version >= latest_macos_version
+            }
+            // Current spec does not handle non-macOS devices, fail safe (no false confidence in update status)
+            &_ => false,
+        };
+    }
 
-    Ok((device_list, status))
+    Ok(device_list)
+}
+
+async fn latest_macos_update(
+    token: String,
+    url: String,
+) -> Result<(String, StatusCode), &'static str> {
+    let versions = match macos_updates::query_jamf_macos_available_updates(url, token).await {
+        Ok(value) => value,
+        Err(err) => return Err(err),
+    };
+
+    let latest_version = find_latest_update(&versions);
+
+    Ok((latest_version.to_string(), StatusCode::OK))
+}
+
+fn find_latest_update<'a>(versions: &'a Vec<String>) -> Version {
+    let latest_version = Version::from("0").expect("failed to set version floor");
+    // Reduce version list to its "greatest" value
+    let latest_version = versions
+        .iter()
+        .fold(latest_version, |latest_version, version| {
+            let version = Version::from(version).unwrap();
+            if version > latest_version {
+                version
+            } else {
+                latest_version
+            }
+        });
+    latest_version
 }

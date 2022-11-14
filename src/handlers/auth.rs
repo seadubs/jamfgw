@@ -1,23 +1,17 @@
-use axum::{
-    extract,
-    http::StatusCode,
-    response,
-    Extension,
-};
+use crate::state::{AuthData, JamfTokenJson, State};
+use axum::{extract, http::StatusCode, response, Extension};
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use crate::state::{AuthData, JamfTokenJson, State};
 
 const JAMF_AUTH_URL: &str = "/api/v1/auth/token";
 
-pub async fn set_auth(
+pub async fn put_auth(
     extract::Json(payload): extract::Json<AuthData>,
     Extension(state): Extension<Arc<State>>,
 ) -> (StatusCode, response::Json<Value>) {
-
-    // If we can auth with the payload creds, update state with new creds
     match validate_auth(payload.clone()).await {
+        // If we can auth with the payload creds, update state with new creds
         Ok(jamf_token) => {
             let mut auth_data = state.auth_data.write().unwrap();
             let mut auth_token = state.auth_token.write().unwrap();
@@ -38,23 +32,40 @@ pub async fn set_auth(
     }
 }
 
-async fn validate_auth(payload: AuthData) -> Result<JamfTokenJson, Box<dyn std::error::Error>> {
+// Test provided credentials against provided url, return token if valid
+async fn validate_auth(payload: AuthData) -> Result<JamfTokenJson, &'static str> {
     let client = Client::new();
     let password: Option<String> = Some(payload.password);
-    let response = client
+
+    let response = match client
         .post(format!("{}{}", payload.url, JAMF_AUTH_URL))
         .basic_auth(payload.username, password)
         .send()
-        .await?
-        .json::<JamfTokenJson>()
-        .await?;
+        .await
+    {
+        Ok(result) => result,
+        Err(_) => return Err("failed to authenticate to jamf"),
+    };
 
-    Ok(response)
+    match response.json::<JamfTokenJson>().await {
+        Ok(token_json) => Ok(token_json),
+        Err(_) => Err("failed to extract bearer token from jamf response"),
+    }
 }
 
 // todo: try_read and reject rather than read() and blocking
+// ! Obviously don't do this in real life, but useful for demo/testing
 pub async fn get_auth(Extension(state): Extension<Arc<State>>) -> response::Json<Value> {
     let auth_data = state.auth_data.read().unwrap();
-    println!("auth_data: {:?}", *auth_data);
     response::Json(json!(*auth_data))
+}
+
+pub async fn del_auth(Extension(state): Extension<Arc<State>>) -> StatusCode {
+    let mut auth_data = state.auth_data.write().unwrap();
+    let mut auth_token = state.auth_token.write().unwrap();
+    let mut auth_valid = state.auth_valid.write().unwrap();
+    *auth_data = AuthData::default();
+    *auth_valid = false;
+    *auth_token = JamfTokenJson::default();
+    StatusCode::NO_CONTENT
 }

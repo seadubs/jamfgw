@@ -8,8 +8,10 @@ use std::sync::{Arc, RwLock};
 use crate::utility::logging;
 pub mod utility;
 
-use crate::handlers::{hello, auth, devices};
+use crate::handlers::{auth, devices, hello};
 pub mod handlers;
+
+pub mod jamf;
 
 pub mod state;
 use crate::state::{AuthData, JamfTokenJson, State};
@@ -27,9 +29,12 @@ async fn main() {
 
     let app = Router::new()
         .route("/api/hello", get(hello::handler))
-        .route("/api/jamf/credentials", post(auth::set_auth))
-        // Obviously don't do this in real life, but useful for demoing
-        .route("/api/jamf/credentials", get(auth::get_auth))
+        .route(
+            "/api/jamf/credentials",
+            post(auth::put_auth)
+                .get(auth::get_auth)
+                .delete(auth::del_auth),
+        )
         .route("/api/jamf/devices", get(devices::get_devices))
         // Shared state for handler access to credentials
         .layer(Extension(state))
