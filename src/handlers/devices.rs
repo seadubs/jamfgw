@@ -63,7 +63,7 @@ pub async fn get_devices(
     };
 }
 
-async fn query_jamf_devices(token: String, url: String) -> Result<Vec<Device>, &'static str> {
+async fn query_jamf_devices(token: String, url: String) -> Result<Vec<ResponseDevice>, &'static str> {
     let mut device_list: Vec<Device> = vec![];
 
     let latest_macos_version = match latest_macos_update(token.clone(), url.clone()).await {
@@ -120,7 +120,12 @@ async fn query_jamf_devices(token: String, url: String) -> Result<Vec<Device>, &
         };
     }
 
-    Ok(device_list)
+    let response_device_list: Vec<ResponseDevice> = device_list.iter().fold(vec![], |mut acc, device| {
+        acc.push(ResponseDevice { device_id: device.device_id.clone(), name: device.name.clone(), model: device.model.clone(), os: device.os.clone(), os_is_latest: device.os_is_latest });
+        acc
+    });
+
+    Ok(response_device_list)
 }
 
 async fn latest_macos_update(
