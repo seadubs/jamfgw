@@ -1,0 +1,324 @@
+{
+	"info": {
+		"_postman_id": "5784388d-c548-4c85-a014-29fe64459761",
+		"name": "jamfgw",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "22319279"
+	},
+	"item": [
+		{
+			"name": "hello world!",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"pm.test(\"Content-Type is application/json\", function () {",
+							"    pm.response.to.have.header(\"Content-Type\");",
+							"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+							"});",
+							"pm.test(\"Returns json { data: hello world! } \", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.data).to.eql('hello world!');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/api/hello",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"hello"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get data unauthorized",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 401\", function () {",
+							"    pm.response.to.have.status(401);",
+							"});",
+							"pm.test(\"Content-Type is application/json\", function () {",
+							"    pm.response.to.have.header(\"Content-Type\");",
+							"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+							"});",
+							"",
+							"var jsonData = pm.response.json();",
+							"",
+							"pm.test(\"Data has err property\", function () {    ",
+							"    pm.expect(jsonData).to.have.property('err');",
+							"});",
+							"",
+							"pm.test(\"Value of err is 'unauthorized'\", function () {",
+							"    pm.expect(jsonData.err).to.eql(\"unauthorized\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/api/jamf/devices",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"jamf",
+						"devices"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "set auth",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 202\", function () {",
+							"    pm.response.to.have.status(202);",
+							"});",
+							"pm.test(\"Content-Type is application/json\", function () {",
+							"    pm.response.to.have.header(\"Content-Type\");",
+							"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+							"});",
+							"pm.test(\"Echoes JSON data\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.username).to.eql(pm.collectionVariables.get(\"username\"));",
+							"    pm.expect(jsonData.password).to.eql(pm.collectionVariables.get(\"password\"));",
+							"    pm.expect(jsonData.url).to.eql(pm.collectionVariables.get(\"url\"));",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"{{username}}\",\n    \"password\": \"{{password}}\",\n    \"url\": \"{{url}}\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:3000/api/jamf/credentials",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"jamf",
+						"credentials"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "get auth",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"pm.test(\"Content-Type is application/json\", function () {",
+							"    pm.response.to.have.header(\"Content-Type\");",
+							"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+							"});",
+							"pm.test(\"Echoes JSON data\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.username).to.eql(pm.collectionVariables.get(\"username\"));",
+							"    pm.expect(jsonData.password).to.eql(pm.collectionVariables.get(\"password\"));",
+							"    pm.expect(jsonData.url).to.eql(pm.collectionVariables.get(\"url\"));",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/api/jamf/credentials",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"jamf",
+						"credentials"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "device data",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"pm.test(\"Content-Type is application/json\", function () {",
+							"    pm.response.to.have.header(\"Content-Type\");",
+							"    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+							"});",
+							"",
+							"var jsonData = pm.response.json();",
+							"pm.test(\"JSON has devices property that is an array\", function () {",
+							"    pm.expect(jsonData.devices).to.be.an('array').but.not.an('object');",
+							"});",
+							"",
+							"pm.test(\"Array element has expected properties\", function () {    ",
+							"    var device = jsonData.devices[0];",
+							"    pm.expect(device).to.have.property('device_id');",
+							"    pm.expect(device).to.have.property('name');",
+							"    pm.expect(device).to.have.property('model');",
+							"    pm.expect(device).to.have.property('os');",
+							"    pm.expect(device).to.have.property('os_is_latest');",
+							"});",
+							"",
+							"pm.test(\"Array element has expected values\", function () {",
+							"    var device = jsonData.devices[0];",
+							"    pm.expect(device.device_id).to.eql(pm.collectionVariables.get(\"device_id\"));",
+							"    pm.expect(device.name).to.eql(pm.collectionVariables.get(\"device_name\"));",
+							"    pm.expect(device.model).to.eql(pm.collectionVariables.get(\"device_model\"));",
+							"    pm.expect(device.os).to.eql(pm.collectionVariables.get(\"device_os\"));",
+							"    pm.expect(device.os_is_latest).to.be.true;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/api/jamf/devices",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"api",
+						"jamf",
+						"devices"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "username",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "password",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "url",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "fakedata",
+			"value": "fake data",
+			"type": "string"
+		},
+		{
+			"key": "device_id",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "device_name",
+			"value": "Mac mini",
+			"type": "string"
+		},
+		{
+			"key": "device_model",
+			"value": "Mac mini (2018)",
+			"type": "string"
+		},
+		{
+			"key": "device_os",
+			"value": "macOS 12.6.0",
+			"type": "string"
+		},
+		{
+			"key": "device_os_is_latest",
+			"value": "true",
+			"type": "string"
+		}
+	]
+}
