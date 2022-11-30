@@ -54,10 +54,14 @@ async fn validate_auth(payload: AuthData) -> Result<JamfTokenJson, &'static str>
 }
 
 // todo: try_read and reject rather than read() and blocking
-// ! Obviously don't do this in real life, but useful for demo/testing
 pub async fn get_auth(Extension(state): Extension<Arc<State>>) -> response::Json<Value> {
     let auth_data = state.auth_data.read().unwrap();
-    response::Json(json!(*auth_data))
+    let response_data = AuthData{
+        username: auth_data.username.clone(),
+        password: "********".parse().unwrap(),
+        url: auth_data.url.clone(),
+    };
+    response::Json(json!(response_data))
 }
 
 pub async fn del_auth(Extension(state): Extension<Arc<State>>) -> StatusCode {

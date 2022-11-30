@@ -3,7 +3,9 @@ use axum::{
     routing::{get, post},
     Extension, Router,
 };
+use http::Method;
 use std::sync::{Arc, RwLock};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::utility::logging;
 pub mod utility;
@@ -27,6 +29,11 @@ async fn main() {
         auth_valid: RwLock::new(false),
     });
 
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
+        .allow_headers(Any)
+        .allow_origin(Any);
+
     let app = Router::new()
         .route("/api/hello", get(hello::handler))
         .route(
@@ -36,12 +43,14 @@ async fn main() {
                 .delete(auth::del_auth),
         )
         .route("/api/jamf/devices", get(devices::get_devices))
+        // Wide open cors policy for the sake of FE app testing
+        .layer(cors)
         // Shared state for handler access to credentials
         .layer(Extension(state))
         // Log request and response headers (replace with logging/metrics/tracing library in a "real" service)
         .layer(middleware::from_fn(logging::log_req_res_stdout));
 
-    axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
+    axum::Server::bind(&"0.0.0.0:3001".parse().unwrap())
         .serve(app.into_make_service())
         .await
         .unwrap();

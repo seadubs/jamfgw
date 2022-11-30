@@ -465,10 +465,12 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
+ "http",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
+ "tower-http",
  "version-compare",
 ]
 
